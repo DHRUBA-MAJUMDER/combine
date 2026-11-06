@@ -2,25 +2,23 @@ import streamlit as st
 import pandas as pd
 import io
 
-st.set_page_config(page_title="Excel Merger", page_icon="📊")
+st.set_page_config(page_title="Excel & CSV Merger", page_icon="📊")
 
-# This creates a dynamic key to easily reset the file uploader
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
-st.title("📊 Excel File Merger")
-st.write("Upload multiple Excel files below to combine them into one master file.")
+st.title("📊 File Merger (Excel & CSV)")
+st.write("Upload multiple Excel and/or CSV files below to combine them into one master file.")
 
-# The uploader now uses the dynamic key from session state
+# UPGRADE 1: Added "csv" to the accepted file types
 uploaded_files = st.file_uploader(
-    "Upload Excel files", 
-    type=["xlsx"], 
+    "Upload Excel or CSV files", 
+    type=["xlsx", "csv"], 
     accept_multiple_files=True,
     key=f"uploader_{st.session_state.uploader_key}"
 )
 
 if uploaded_files:
-    # UI UPGRADE 1: Show exactly how many files were uploaded
     st.info(f"📂 {len(uploaded_files)} file(s) uploaded and ready to merge.")
 
     if st.button("⚙️ Merge Files"):
@@ -30,7 +28,12 @@ if uploaded_files:
 
         for i, file in enumerate(uploaded_files):
             try:
-                df = pd.read_excel(file)
+                # UPGRADE 2: Check the file extension and read accordingly
+                if file.name.lower().endswith('.csv'):
+                    df = pd.read_csv(file)
+                else:
+                    df = pd.read_excel(file)
+                    
                 df['Source_File'] = file.name
                 dataframes_list.append(df)
             except Exception as e:
@@ -61,8 +64,6 @@ if uploaded_files:
 
     st.divider()
     
-    # UI UPGRADE 2: Clear button to reset the uploader
     if st.button("🗑️ Clear Files & Start Over"):
-        # Changing the session state key forces the uploader widget to reset
         st.session_state.uploader_key += 1
         st.rerun()
