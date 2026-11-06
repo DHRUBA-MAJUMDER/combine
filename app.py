@@ -10,12 +10,17 @@ if "uploader_key" not in st.session_state:
 st.title("📊 File Merger (Excel & CSV)")
 st.write("Upload multiple Excel and/or CSV files below to combine them into one master file.")
 
-# UPGRADE 1: Added "csv" to the accepted file types
 uploaded_files = st.file_uploader(
     "Upload Excel or CSV files", 
     type=["xlsx", "csv"], 
     accept_multiple_files=True,
     key=f"uploader_{st.session_state.uploader_key}"
+)
+
+# UPGRADE: Added a toggle so users can choose to export as CSV (which prevents 502 server crashes)
+output_format = st.radio(
+    "Select Output Format:", 
+    ["CSV (Recommended for 10+ files - Very Fast)", "Excel .xlsx (May crash server if files are too large)"]
 )
 
 if uploaded_files:
@@ -28,7 +33,6 @@ if uploaded_files:
 
         for i, file in enumerate(uploaded_files):
             try:
-                # UPGRADE 2: Check the file extension and read accordingly
                 if file.name.lower().endswith('.csv'):
                     df = pd.read_csv(file)
                 else:
@@ -46,18 +50,30 @@ if uploaded_files:
             status_text.text("Combining files...")
             master_df = pd.concat(dataframes_list, ignore_index=True)
             
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                master_df.to_excel(writer, index=False)
-            processed_data = output.getvalue()
+            status_text.text("Preparing file for download...")
+            
+            # UPGRADE: Check which format the user selected and process accordingly
+            if "CSV" in output_format:
+                # CSV export takes almost zero memory and is instant
+                processed_data = master_df.to_csv(index=False).encode('utf-8')
+                file_name = "Master_Combined_File.csv"
+                mime_type = "text/csv"
+            else:
+                # Excel export is heavy and might crash on free servers for big files
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    master_df.to_excel(writer, index=False)
+                processed_data = output.getvalue()
+                file_name = "Master_Combined_File.xlsx"
+                mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
             st.success(f"✅ Successfully merged {len(uploaded_files)} files! (Total Rows: {len(master_df)})")
             
             st.download_button(
-                label="⬇️ Download Master Excel File",
+                label=f"⬇️ Download {file_name}",
                 data=processed_data,
-                file_name="Master_Combined_File.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                file_name=file_name,
+                mime=mime_type
             )
         else:
             st.error("No data could be extracted.")
