@@ -17,7 +17,6 @@ uploaded_files = st.file_uploader(
     key=f"uploader_{st.session_state.uploader_key}"
 )
 
-# UPGRADE: Added a toggle so users can choose to export as CSV (which prevents 502 server crashes)
 output_format = st.radio(
     "Select Output Format:", 
     ["CSV (Recommended for 10+ files - Very Fast)", "Excel .xlsx (May crash server if files are too large)"]
@@ -33,11 +32,23 @@ if uploaded_files:
 
         for i, file in enumerate(uploaded_files):
             try:
+                # 1. Read the file (skipping bad lines if the CSV is malformed)
                 if file.name.lower().endswith('.csv'):
-                    df = pd.read_csv(file)
+                    df = pd.read_csv(file, skipinitialspace=True, on_bad_lines='skip')
                 else:
                     df = pd.read_excel(file)
-                    
+                
+                # --- AUTO-CLEANUP START ---
+                # A. Drop rows that are completely blank
+                df.dropna(how='all', inplace=True)
+                
+                # B. Drop random "Unnamed" ghost columns that systems often export
+                df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+                
+                # C. Strip invisible spaces from column headers so they match perfectly
+                df.columns = df.columns.astype(str).str.strip()
+                # --- AUTO-CLEANUP END ---
+                
                 df['Source_File'] = file.name
                 dataframes_list.append(df)
             except Exception as e:
@@ -52,14 +63,11 @@ if uploaded_files:
             
             status_text.text("Preparing file for download...")
             
-            # UPGRADE: Check which format the user selected and process accordingly
             if "CSV" in output_format:
-                # CSV export takes almost zero memory and is instant
                 processed_data = master_df.to_csv(index=False).encode('utf-8')
                 file_name = "Master_Combined_File.csv"
                 mime_type = "text/csv"
             else:
-                # Excel export is heavy and might crash on free servers for big files
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     master_df.to_excel(writer, index=False)
